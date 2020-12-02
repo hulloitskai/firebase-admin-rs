@@ -17,7 +17,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(project_id: String) -> Result<Self> {
+    pub fn new(project_id: &str) -> Result<Self> {
         let runtime = RuntimeBuilder::new_current_thread()
             .build()
             .context("failed to initialize Tokio runtime")?;
@@ -25,7 +25,7 @@ impl App {
             .block_on(init_auth_manager().compat())
             .context("failed to initialize authentication manager")?;
         let app = Self {
-            project_id,
+            project_id: project_id.to_owned(),
             auth: auth_manager,
         };
         Ok(app)
