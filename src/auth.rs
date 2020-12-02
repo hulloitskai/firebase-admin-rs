@@ -6,17 +6,17 @@ use crate::app::App;
 use builder::Builder;
 use request::{Method, Response};
 
-pub struct Authentication<'a> {
+pub struct Auth<'a> {
     app: &'a App,
 }
 
-impl<'a> Authentication<'a> {
+impl<'a> Auth<'a> {
     pub(crate) fn new(app: &'a App) -> Self {
         Self { app }
     }
 }
 
-impl<'a> Authentication<'a> {
+impl<'a> Auth<'a> {
     fn endpoint_url(&self, name: &str) -> String {
         let project_id = self.app.project_id();
         format!(
@@ -27,8 +27,8 @@ impl<'a> Authentication<'a> {
 }
 
 #[derive(Debug, Clone, Hash, Serialize, Deserialize)]
-pub struct User {
-    pub id: String,
+pub struct UserRecord {
+    pub uid: String,
     pub created_at: DateTime,
     pub display_name: Option<String>,
     pub email: String,
@@ -40,8 +40,8 @@ pub struct User {
 #[derive(Debug, Clone, Hash, Builder)]
 #[builder(build_fn(private, name = "build_internal"))]
 #[builder(setter(strip_option, into))]
-pub struct UserConfig {
-    id: String,
+pub struct CreateUserParams {
+    uid: String,
 
     #[builder(default)]
     display_name: Option<String>,
@@ -58,14 +58,14 @@ pub struct UserConfig {
     password: Option<String>,
 }
 
-impl UserConfig {
-    pub fn builder() -> UserConfigBuilder {
-        UserConfigBuilder::default()
+impl CreateUserParams {
+    pub fn builder() -> CreateUserParamsBuilder {
+        CreateUserParamsBuilder::default()
     }
 }
 
-impl UserConfigBuilder {
-    pub fn build(&mut self) -> Result<UserConfig> {
+impl CreateUserParamsBuilder {
+    pub fn build(&mut self) -> Result<CreateUserParams> {
         self.build_internal().map_err(Error::msg)
     }
 }
@@ -74,7 +74,7 @@ impl UserConfigBuilder {
 #[builder(build_fn(private, name = "build_internal"))]
 #[builder(default)]
 #[builder(setter(strip_option, into))]
-pub struct UserUpdate {
+pub struct UpdateUserParams {
     disable: Option<bool>,
     display_name: Option<String>,
     email: Option<String>,
@@ -89,13 +89,13 @@ pub struct UserUpdate {
     delete_provider: Vec<String>,
 }
 
-impl UserUpdate {
-    pub fn builder() -> UserUpdateBuilder {
-        UserUpdateBuilder::default()
+impl UpdateUserParams {
+    pub fn builder() -> UpdateUserParamsBuilder {
+        UpdateUserParamsBuilder::default()
     }
 }
 
-impl UserUpdateBuilder {
+impl UpdateUserParamsBuilder {
     fn remove_attribute<'a>(&'a mut self, name: &str) -> &'a mut Self {
         let attributes = match &mut self.delete_attribute {
             Some(attributes) => attributes,
@@ -133,14 +133,14 @@ impl UserUpdateBuilder {
     }
 }
 
-impl UserUpdateBuilder {
-    pub fn build(&mut self) -> Result<UserUpdate> {
+impl UpdateUserParamsBuilder {
+    pub fn build(&mut self) -> Result<UpdateUserParams> {
         self.build_internal().map_err(Error::msg)
     }
 }
 
-impl<'a> Authentication<'a> {
-    pub async fn get_user(&self, id: &str) -> Result<User> {
+impl<'a> Auth<'a> {
+    pub async fn get_user(&self, id: &str) -> Result<UserRecord> {
         let url = self.endpoint_url("accounts:lookup");
         let request = self
             .app
@@ -154,7 +154,7 @@ impl<'a> Authentication<'a> {
         let response =
             request.send().compat().await.context("request failed")?;
         let response = handle_error_response(response).await?;
-        let data: LookupAccountsResponse =
+        let data: LookupUsersResponse =
             response.json().await.context("failed to parse response")?;
 
         let users = data.users.context("not found")?;
@@ -165,7 +165,10 @@ impl<'a> Authentication<'a> {
         user.try_into().context("failed to convert user")
     }
 
-    pub async fn create_user(&self, config: UserConfig) -> Result<User> {
+    pub async fn create_user(
+        &self,
+        params: CreateUserParams,
+    ) -> Result<UserRecord> {
         let url = self.endpoint_url("accounts");
         let request = self
             .app
@@ -173,7 +176,7 @@ impl<'a> Authentication<'a> {
             .await
             .context("failed to initialize request")?;
 
-        let body = RequestUserConfig::from(config);
+        let body = CreateUserRequest::from(params);
         let request = request.json(&body);
 
         let response =
@@ -190,9 +193,9 @@ impl<'a> Authentication<'a> {
 
     pub async fn update_user(
         &self,
-        id: &str,
-        update: UserUpdate,
-    ) -> Result<User> {
+        uid: &str,
+        params: UpdateUserParams,
+    ) -> Result<UserRecord> {
         let url = self.endpoint_url("accounts:update");
         let request = self
             .app
@@ -201,8 +204,8 @@ impl<'a> Authentication<'a> {
             .context("failed to initialize request")?;
 
         let body = UpdateUserRequest {
-            local_id: id.to_owned(),
-            update: RequestUserUpdate::from(update),
+            local_id: uid.to_owned(),
+            data: UpdateUserData::from(params),
         };
         let request = request.json(&body);
 
@@ -210,12 +213,12 @@ impl<'a> Authentication<'a> {
             request.send().compat().await.context("request failed")?;
         let _ = handle_error_response(response).await?;
 
-        self.get_user(id)
+        self.get_user(uid)
             .await
             .context("failed to get updated user")
     }
 
-    pub async fn delete_user(&self, id: &str) -> Result<()> {
+    pub async fn delete_user(&self, uid: &str) -> Result<()> {
         let url = self.endpoint_url("accounts:delete");
         let request = self
             .app
@@ -223,7 +226,7 @@ impl<'a> Authentication<'a> {
             .await
             .context("failed to initialize request")?;
 
-        let body = json!({ "localId": id });
+        let body = json!({ "localId": uid });
         let request = request.json(&body);
 
         let response =
@@ -248,25 +251,25 @@ pub async fn handle_error_response(
 #[derive(Debug, Clone, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ErrorResponse {
-    error: ResponseError,
+    error: ErrorData,
 }
 
 #[derive(Debug, Clone, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ResponseError {
+struct ErrorData {
     message: String,
 }
 
 #[derive(Debug, Clone, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct LookupAccountsResponse {
+struct LookupUsersResponse {
     kind: String,
-    users: Option<Vec<ResponseUser>>,
+    users: Option<Vec<UserRecordData>>,
 }
 
 #[derive(Debug, Clone, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ResponseUser {
+struct UserRecordData {
     local_id: String,
     created_at: String,
     valid_since: String,
@@ -277,11 +280,11 @@ struct ResponseUser {
     disabled: bool,
 }
 
-impl TryFrom<ResponseUser> for User {
+impl TryFrom<UserRecordData> for UserRecord {
     type Error = Error;
 
-    fn try_from(user: ResponseUser) -> Result<Self, Self::Error> {
-        let ResponseUser {
+    fn try_from(user: UserRecordData) -> Result<Self, Self::Error> {
+        let UserRecordData {
             local_id: id,
             created_at,
             display_name,
@@ -296,7 +299,7 @@ impl TryFrom<ResponseUser> for User {
             .context("failed to parse 'created_at' as i64")?;
         let created_at = Utc.timestamp_millis(created_at);
         Ok(Self {
-            id,
+            uid: id,
             created_at,
             display_name,
             email,
@@ -309,7 +312,7 @@ impl TryFrom<ResponseUser> for User {
 
 #[derive(Debug, Clone, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RequestUserConfig {
+struct CreateUserRequest {
     pub local_id: String,
     pub display_name: Option<String>,
     pub email: String,
@@ -318,10 +321,10 @@ struct RequestUserConfig {
     pub password: Option<String>,
 }
 
-impl From<UserConfig> for RequestUserConfig {
-    fn from(config: UserConfig) -> Self {
-        let UserConfig {
-            id: local_id,
+impl From<CreateUserParams> for CreateUserRequest {
+    fn from(config: CreateUserParams) -> Self {
+        let CreateUserParams {
+            uid: local_id,
             display_name,
             email,
             email_verified,
@@ -347,7 +350,7 @@ struct CreateUserResponse {
 
 #[derive(Debug, Clone, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RequestUserUpdate {
+struct UpdateUserData {
     disable_user: Option<bool>,
     display_name: Option<String>,
     email: Option<String>,
@@ -358,9 +361,9 @@ struct RequestUserUpdate {
     delete_provider: Option<Vec<String>>,
 }
 
-impl From<UserUpdate> for RequestUserUpdate {
-    fn from(update: UserUpdate) -> Self {
-        let UserUpdate {
+impl From<UpdateUserParams> for UpdateUserData {
+    fn from(update: UpdateUserParams) -> Self {
+        let UpdateUserParams {
             disable: disable_user,
             display_name,
             email,
@@ -397,5 +400,5 @@ struct UpdateUserRequest {
     local_id: String,
 
     #[serde(flatten)]
-    update: RequestUserUpdate,
+    data: UpdateUserData,
 }

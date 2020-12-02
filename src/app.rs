@@ -1,7 +1,7 @@
 use super::common::*;
 
 use crate::api::OAUTH_SCOPES;
-use crate::auth::Authentication;
+use crate::auth::Auth;
 
 use gcloud_auth::init as init_auth_manager;
 use gcloud_auth::AuthenticationManager as AuthManager;
@@ -33,8 +33,8 @@ impl App {
         Ok(app)
     }
 
-    pub fn authentication<'a>(&'a self) -> Authentication<'a> {
-        Authentication::new(self)
+    pub fn auth<'a>(&'a self) -> Auth<'a> {
+        Auth::new(self)
     }
 }
 
