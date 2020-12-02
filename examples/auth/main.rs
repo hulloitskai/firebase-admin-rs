@@ -49,8 +49,7 @@ fn main() -> Result<()> {
             .context("failed to update user")?;
         println!("Updated user: {:#?}", &user);
 
-        auth
-            .delete_user(user_id)
+        auth.delete_user(user_id)
             .await
             .context("failed to delete user")?;
         println!("User {} was deleted", user_id);

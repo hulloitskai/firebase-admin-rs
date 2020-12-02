@@ -25,5 +25,5 @@ pub mod api;
 pub mod app;
 pub use app::*;
 
-pub mod authentication;
-pub use authentication::*;
+pub mod auth;
+pub use auth::*;

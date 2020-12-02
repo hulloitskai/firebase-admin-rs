@@ -1,7 +1,7 @@
 use super::common::*;
 
 use crate::api::OAUTH_SCOPES;
-use crate::authentication::Authentication;
+use crate::auth::Authentication;
 
 use gcloud_auth::init as init_auth_manager;
 use gcloud_auth::AuthenticationManager as AuthManager;
