@@ -19,7 +19,7 @@ fn main() -> Result<()> {
 
     let project_id = get_env_var("FIREBASE_PROJECT_ID")
         .context("failed to get FIREBASE_PROJECT_ID")?;
-    let app = App::new(project_id).context("failed to initialize app")?;
+    let app = App::new(&project_id).context("failed to initialize app")?;
     let auth = app.authentication();
 
     let runtime = Runtime::new().context("initialize Tokio runtime")?;

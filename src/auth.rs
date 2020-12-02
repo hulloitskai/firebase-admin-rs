@@ -4,24 +4,20 @@ use crate::api::IDENTITY_TOOLKIT_ENDPOINT;
 use crate::app::App;
 
 use builder::Builder;
-use request::{Client, Response};
+use request::{Method, Response};
 
 pub struct Authentication<'a> {
     app: &'a App,
-    client: Client,
 }
 
 impl<'a> Authentication<'a> {
     pub(crate) fn new(app: &'a App) -> Self {
-        Self {
-            app,
-            client: Client::new(),
-        }
+        Self { app }
     }
 }
 
 impl<'a> Authentication<'a> {
-    fn method_url(&self, name: &str) -> String {
+    fn endpoint_url(&self, name: &str) -> String {
         let project_id = self.app.project_id();
         format!(
             "{}/projects/{}/{}",
@@ -145,15 +141,18 @@ impl UserUpdateBuilder {
 
 impl<'a> Authentication<'a> {
     pub async fn get_user(&self, id: &str) -> Result<User> {
-        let url = self.method_url("accounts:lookup");
-        let body = json!({ "localId": [id] });
-        let request = self.client.post(&url).json(&body);
-
-        let response = self
+        let url = self.endpoint_url("accounts:lookup");
+        let request = self
             .app
-            .send_request(request)
+            .request(Method::POST, &url)
             .await
-            .context("request failed")?;
+            .context("failed to initialize request")?;
+
+        let body = json!({ "localId": [id] });
+        let request = request.json(&body);
+
+        let response =
+            request.send().compat().await.context("request failed")?;
         let response = handle_error_response(response).await?;
         let data: LookupAccountsResponse =
             response.json().await.context("failed to parse response")?;
@@ -167,15 +166,18 @@ impl<'a> Authentication<'a> {
     }
 
     pub async fn create_user(&self, config: UserConfig) -> Result<User> {
-        let url = self.method_url("accounts");
-        let body = RequestUserConfig::from(config);
-        let request = self.client.post(&url).json(&body);
-
-        let response = self
+        let url = self.endpoint_url("accounts");
+        let request = self
             .app
-            .send_request(request)
+            .request(Method::POST, &url)
             .await
-            .context("request failed")?;
+            .context("failed to initialize request")?;
+
+        let body = RequestUserConfig::from(config);
+        let request = request.json(&body);
+
+        let response =
+            request.send().compat().await.context("request failed")?;
         let response = handle_error_response(response).await?;
         let data: CreateUserResponse =
             response.json().await.context("failed to parse response")?;
@@ -191,39 +193,43 @@ impl<'a> Authentication<'a> {
         id: &str,
         update: UserUpdate,
     ) -> Result<User> {
-        let url = self.method_url("accounts:update");
+        let url = self.endpoint_url("accounts:update");
+        let request = self
+            .app
+            .request(Method::POST, &url)
+            .await
+            .context("failed to initialize request")?;
+
         let body = UpdateUserRequest {
             local_id: id.to_owned(),
             update: RequestUserUpdate::from(update),
         };
-        let request = self.client.post(&url).json(&body);
+        let request = request.json(&body);
 
-        let response = self
-            .app
-            .send_request(request)
-            .await
-            .context("request failed")?;
-        let response = handle_error_response(response).await?;
-        let data: CreateUserResponse =
-            response.json().await.context("failed to parse response")?;
+        let response =
+            request.send().compat().await.context("request failed")?;
+        let _ = handle_error_response(response).await?;
 
-        let id = &data.local_id;
         self.get_user(id)
             .await
             .context("failed to get updated user")
     }
 
     pub async fn delete_user(&self, id: &str) -> Result<()> {
-        let url = self.method_url("accounts:delete");
-        let body = json!({ "localId": id });
-        let request = self.client.post(&url).json(&body);
-
-        let response = self
+        let url = self.endpoint_url("accounts:delete");
+        let request = self
             .app
-            .send_request(request)
+            .request(Method::POST, &url)
             .await
-            .context("request failed")?;
+            .context("failed to initialize request")?;
+
+        let body = json!({ "localId": id });
+        let request = request.json(&body);
+
+        let response =
+            request.send().compat().await.context("request failed")?;
         let _ = handle_error_response(response).await?;
+
         Ok(())
     }
 }

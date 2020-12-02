@@ -8,11 +8,12 @@ use gcloud_auth::AuthenticationManager as AuthManager;
 use gcloud_auth::Error as AuthError;
 use gcloud_auth::Token as AuthToken;
 
-use request::{RequestBuilder, Response};
+use request::{Client, IntoUrl, Method, RequestBuilder};
 use tokio::runtime::Builder as RuntimeBuilder;
 
 pub struct App {
     project_id: String,
+    client: Client,
     auth: AuthManager,
 }
 
@@ -26,6 +27,7 @@ impl App {
             .context("failed to initialize authentication manager")?;
         let app = Self {
             project_id: project_id.to_owned(),
+            client: Client::new(),
             auth: auth_manager,
         };
         Ok(app)
@@ -47,17 +49,18 @@ impl App {
         self.auth.get_token(&OAUTH_SCOPES).await
     }
 
-    pub(crate) async fn send_request(
+    pub(super) async fn request<U: IntoUrl>(
         &self,
-        request: RequestBuilder,
-    ) -> Result<Response> {
+        method: Method,
+        url: U,
+    ) -> Result<RequestBuilder> {
         let token = self
             .get_token()
             .compat()
             .await
             .context("failed to get authentication token")?;
-        let response =
-            request.bearer_auth(token.as_str()).send().compat().await?;
-        Ok(response)
+        let request =
+            self.client.request(method, url).bearer_auth(token.as_str());
+        Ok(request)
     }
 }
