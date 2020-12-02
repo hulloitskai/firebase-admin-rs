@@ -1,0 +1,29 @@
+[package]
+name = "firebase-admin"
+version = "0.1.0"
+authors = ["Steven Xie <dev@stevenxie.me>"]
+edition = "2018"
+
+
+[dependencies]
+anyhow = "1"
+builder = { package = "derive_builder", version = "0.9" }
+chrono = "0.4"
+futures = { package = "futures-core", version = "0.3" }
+gcloud_auth = { package = "gcp_auth", version = "0.3" }
+json = { package = "serde_json", version = "1" }
+serde = "1"
+tokio = { version = "0.3", features = ["rt"] }
+tokio_compat = { package = "tokio-compat-02", version = "0.1" }
+
+[dependencies.request]
+package = "reqwest"
+version = "0.10"
+default-features = false
+features = ["rustls-tls", "json"]
+
+
+[dev-dependencies]
+dotenv = "0.15"
+tokio = { version = "0.3", features = ["rt", "rt-multi-thread"] }
+uuid = { version = "0.8", features = ["v4"] }
